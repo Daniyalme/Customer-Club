@@ -34,7 +34,8 @@ def read_purchases():
                'id':     int(r['id']),
                'date':   r['date'],
                'phone':  r['phone'],
-               'amount': float(r['amount'])
+               'amount': float(r['amount']),
+               'profit': float(r['profit'])
            }
            for r in reader
        ]
@@ -59,6 +60,7 @@ def build_summary(phone, name):
     # pcs = df_purchases[df_purchases["phone"] == phone]
     pcs = [p for p in read_purchases() if p["phone"] == phone]
     total = sum(p["amount"] for p in pcs)
+    total_profit = sum(p["profit"] for p in pcs)
     numOverThresh = len([p for p in pcs if p["amount"] >= PURCHASE_THRESHOLD])
     return {
         "phone": phone,
@@ -66,29 +68,32 @@ def build_summary(phone, name):
         "totalValue": total,
         "numPurchases": len(pcs),
         "numOverThresh": numOverThresh,
+        "totalProfit": total_profit,
         "purchases": pcs,
     }
     
 def write_purchases_file(all_pcs):
     with open(P1, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['id','date','phone','amount'])
+        writer = csv.DictWriter(f, fieldnames=['id','date','phone','amount', 'profit'])
         writer.writeheader()
         for p in all_pcs:
             writer.writerow({
                 'id':     p['id'],
                 'date':   p['date'],
                 'phone':  p['phone'],
-                'amount': f"{p['amount']:.2f}"
+                'amount': f"{p['amount']:.2f}",
+                'profit': f"{p['profit']:.2f}"
             })
 
-def append_purchase(phone, amount):
+def append_purchase(phone, amount, profit):
     pcs = read_purchases()
     next_id = max((p['id'] for p in pcs), default=0) + 1
     new = {
         'id':     next_id,
         'date':   datetime.now().strftime('%Y-%m-%d'),
         'phone':  phone,
-        'amount': amount
+        'amount': amount,
+        'profit': profit
     }
     pcs.append(new)
     write_purchases_file(pcs)
@@ -109,6 +114,7 @@ def add_purchase(phone):
     data = request.get_json()
     amount = data.get("amount")
     name = data.get("name", "").strip()
+    profit = data.get("profit")
     
     if amount is None or amount <= 0:
         return jsonify({"message": "Invalid purchase amount."}), 400
@@ -122,7 +128,7 @@ def add_purchase(phone):
         custs[phone] = name
 
     # record purchase
-    append_purchase(phone, amount)
+    append_purchase(phone, amount, profit)
     
     # respond with fresh summary + all purchases
     return jsonify(build_summary(phone, custs[phone]))
@@ -132,6 +138,7 @@ def add_purchase(phone):
 def edit_purchase(pid):
     data   = request.get_json()
     amount = data.get('amount')
+    profit = data.get('profit')
     if amount is None or amount <= 0:
         return jsonify({'message': 'Invalid amount.'}), 400
 
@@ -141,6 +148,7 @@ def edit_purchase(pid):
         return jsonify({'message': 'Purchase not found.'}), 404
 
     found['amount'] = amount
+    found['profit'] = profit
     write_purchases_file(pcs)
     custs = read_customers()
     return jsonify(build_summary(found['phone'], custs[found['phone']]))

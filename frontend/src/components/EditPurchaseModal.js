@@ -19,9 +19,10 @@ const CustomButton = styled(Button)(() => ({
 
 export default function EditPurchaseModal({ purchase, open, onClose, onSave }) {
   const [newAmount, setNewAmount] = useState(purchase?.amount || "");
+  const [newProfit, setNewProfit] = useState(purchase?.profit || "");
 
   const handleSubmit = () => {
-    onSave(purchase.id, parseFloat(newAmount));
+    onSave(purchase.id, parseFloat(newAmount), parseFloat(newProfit));
     onClose();
   };
 
@@ -40,6 +41,14 @@ export default function EditPurchaseModal({ purchase, open, onClose, onSave }) {
           label="New Amount"
           value={newAmount}
           onChange={(e) => setNewAmount(e.target.value)}
+          sx={{ marginTop: "20px" }}
+          fullWidth
+          onKeyDown={handleKeyDown}
+        />
+        <TextField
+          label="New Profit"
+          value={newProfit}
+          onChange={(e) => setNewProfit(e.target.value)}
           sx={{ marginTop: "20px" }}
           fullWidth
           onKeyDown={handleKeyDown}

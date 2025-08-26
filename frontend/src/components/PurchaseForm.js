@@ -24,9 +24,23 @@ const CustomButton = styled(Button)(() => ({
   borderRadius: "8px",
 }));
 
+const InfoContainer = styled.div(() => ({
+  display: "flex",
+  flexDirection: "row",
+  padding: "0 20px",
+  justifyContent: "space-between",
+}));
+
+const InfoSection = styled.div(() => ({
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
+}));
+
 export default function PurchaseForm({ customer, isNew, setIsNew, onDone }) {
   const [name, setName] = useState(customer.name || "");
   const [amount, setAmount] = useState("");
+  const [profit, setProfit] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [secondErrorMsg, setSecondErrorMsg] = useState("");
   const [data, setData] = useState(customer);
@@ -55,6 +69,7 @@ export default function PurchaseForm({ customer, isNew, setIsNew, onDone }) {
     setErrorMsg("");
     let flag = false;
     const amt = parseFloat(amount);
+    const prof = parseFloat(profit);
     if (isNaN(amt) || amt <= 0) {
       setErrorMsg("Enter a valid purchase amount.");
       flag = true;
@@ -70,12 +85,14 @@ export default function PurchaseForm({ customer, isNew, setIsNew, onDone }) {
       const res = await addPurchase(
         customer.phone,
         amt,
+        prof,
         isNew ? name : undefined
       );
       setData(res.data);
       setIsNew(false);
       setName(res.data.name);
       setAmount("");
+      setProfit("");
     } catch {
       setErrorMsg("Failed to record purchase.");
     }
@@ -100,51 +117,75 @@ export default function PurchaseForm({ customer, isNew, setIsNew, onDone }) {
         <Divider>
           <Chip label="User Info" size="small" />
         </Divider>
-        <TextField label="Phone Number" value={data.phone} disabled fullWidth />
-        <TextField
-          label="Customer Name"
-          value={name}
-          disabled={!isNew}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth
-        />
-        <Divider>
-          <Chip label="Purchase Info" size="small" />
-        </Divider>
+        {isNew && (
+          <TextField
+            label="Customer Name"
+            value={name}
+            disabled={!isNew}
+            onChange={(e) => setName(e.target.value)}
+            fullWidth
+          />
+        )}
 
         {!isNew && (
           <>
-            <Typography>
-              Name: <strong>{data?.name}</strong>
-            </Typography>
-            <Typography>
-              Total spent:{" "}
-              <strong>
-                €{new Intl.NumberFormat("en-US").format(data?.totalValue)}
-              </strong>
-            </Typography>
-            <Typography>
-              Purchases:{" "}
-              <strong>
-                <Link
-                  component="button"
-                  underline="hover"
-                  onClick={() => setOpenModal(true)}
-                >
-                  {data?.numPurchases}
-                </Link>
-              </strong>
-            </Typography>
-            <Typography>
-              Purchases over €300: <strong>{data?.numOverThresh} </strong>
-            </Typography>
+            <InfoContainer>
+              <InfoSection>
+                <Typography>
+                  🔸Name: <strong>{data?.name}</strong>
+                </Typography>
+                <Typography>
+                  🔸Phone: <strong>{data?.phone}</strong>
+                </Typography>
+                <Typography>
+                  🔸Total Profit:{" "}
+                  <strong>
+                    €{new Intl.NumberFormat("en-US").format(data?.totalProfit)}
+                  </strong>
+                </Typography>
+              </InfoSection>
+
+              <InfoSection>
+                <Typography>
+                  🔸Total Spent:{" "}
+                  <strong>
+                    €{new Intl.NumberFormat("en-US").format(data?.totalValue)}
+                  </strong>
+                </Typography>
+                <Typography>
+                  🔸Purchases:{" "}
+                  <strong>
+                    <Link
+                      component="button"
+                      underline="hover"
+                      onClick={() => setOpenModal(true)}
+                    >
+                      {data?.numPurchases}
+                    </Link>
+                  </strong>
+                </Typography>
+                <Typography>
+                  🔸Purchases over €300: <strong>{data?.numOverThresh} </strong>
+                </Typography>
+              </InfoSection>
+            </InfoContainer>
             <Divider />
           </>
         )}
+        <Divider>
+          <Chip label={"Purchase Info"} size="small" />
+        </Divider>
         <TextField
           label="New Purchase (€)"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={handleKeyDown}
+          fullWidth
+        />
+        <TextField
+          label="Profit (€)"
+          value={profit}
+          onChange={(e) => setProfit(e.target.value)}
           onKeyDown={handleKeyDown}
           fullWidth
         />

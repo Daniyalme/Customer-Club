@@ -8,13 +8,13 @@ export function lookupCustomer(phone) {
   return api.get(`/customers/${phone}`);
 }
 
-export function addPurchase(phone, amount, name = "") {
-  return api.post(`/customers/${phone}/purchase`, { amount, name });
+export function addPurchase(phone, amount, profit, name = "") {
+  return api.post(`/customers/${phone}/purchase`, { amount, profit, name });
 }
 
 // Edit an existing purchase
-export function editPurchase(purchaseId, amount) {
-  return api.put(`/purchases/${purchaseId}`, { amount });
+export function editPurchase(purchaseId, amount, profit) {
+  return api.put(`/purchases/${purchaseId}`, { amount, profit });
 }
 
 // Delete an existing purchase

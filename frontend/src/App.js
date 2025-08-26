@@ -30,7 +30,7 @@ const CustomCard = styled(Card)(() => ({
   // height: "100%",
   // flexGrow: "1",
   display: "flex",
-  width: "min(400px, 40vw)",
+  width: "min(520px, 40vw)",
   flexDirection: "column",
   padding: "20px",
   border: "2px solid #e0e0e2",

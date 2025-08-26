@@ -31,6 +31,11 @@ const CustomPaper = styled(Paper)(({ theme }) => ({
   borderRadius: "12px",
 }));
 
+const AlertContainer = styled.div(() => ({
+  display: "flex",
+  flexDirection: "column",
+}));
+
 const CustomContainer = styled.div(() => ({
   display: "flex",
   flexDirection: "column",
@@ -60,6 +65,7 @@ export default function PurchasesTableModal({
     purchase: null, // purchase object being modified
   });
   const [successMsg, setSuccessMsg] = useState("");
+  const [secondSuccessMsg, setSecondSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
   const openEditModal = (purchase) => {
@@ -82,14 +88,15 @@ export default function PurchasesTableModal({
     setPage(0);
   };
 
-  const handleEditPurchase = async (id, amount) => {
+  const handleEditPurchase = async (id, amount, profit) => {
     try {
-      const updated = await editPurchase(id, amount); // your existing API
+      const updated = await editPurchase(id, amount, profit); // your existing API
       //   console.log({ updated });
       setLocalPurchases(updated.data.purchases);
       setActionModal({ type: null, purchase: null });
       updateData(updated.data);
       setSuccessMsg(`Amount changed to €${amount}`);
+      setSecondSuccessMsg(`Profit changed to €${profit}`);
     } catch (error) {
       setErrorMsg(`Edit Failed: ${error}`);
     }
@@ -172,15 +179,26 @@ export default function PurchasesTableModal({
                 <CloseIcon />
               </IconButton>
             </Box>
-            {successMsg && (
-              <Alert
-                severity="success"
-                onClose={() => setSuccessMsg("")}
-                sx={{ mt: 2 }}
-              >
-                {successMsg}
-              </Alert>
-            )}
+            <AlertContainer>
+              {successMsg && (
+                <Alert
+                  severity="success"
+                  onClose={() => setSuccessMsg("")}
+                  sx={{ mt: 2 }}
+                >
+                  {successMsg}
+                </Alert>
+              )}
+              {secondSuccessMsg && (
+                <Alert
+                  severity="success"
+                  onClose={() => setSecondSuccessMsg("")}
+                  sx={{ mt: 2 }}
+                >
+                  {secondSuccessMsg}
+                </Alert>
+              )}
+            </AlertContainer>
             {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
           </CustomContainer>
         </DialogTitle>
@@ -215,6 +233,18 @@ export default function PurchasesTableModal({
                       Amount
                     </TableSortLabel>
                   </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold" }}
+                    sortDirection={orderBy === "profit" ? order : false}
+                  >
+                    <TableSortLabel
+                      active={orderBy === "profit"}
+                      direction={order}
+                      onClick={() => handleRequestSort("profit")}
+                    >
+                      Profit
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -234,6 +264,9 @@ export default function PurchasesTableModal({
                         </strong>
                       )}
                     </TableCell>
+                    <TableCell>{`€${new Intl.NumberFormat("en-US").format(
+                      row.profit
+                    )}`}</TableCell>
                     <TableCell>
                       <IconButton onClick={() => openEditModal(row)}>
                         <EditIcon fontSize="small" />
