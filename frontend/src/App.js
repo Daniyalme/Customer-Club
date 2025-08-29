@@ -1,8 +1,24 @@
+// src/App.js
 import React, { useState } from "react";
-import { Container, Card, CardContent, Typography, Box } from "@mui/material";
-import LookupForm from "./components/LookupForm";
-import PurchaseForm from "./components/PurchaseForm";
-import styled from "@emotion/styled";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+
+// Import MUI Components
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  Box,
+  IconButton,
+} from "@mui/material"; // Add IconButton
+
+// Import MUI Icons for the pin button
+import PushPinIcon from "@mui/icons-material/PushPin";
+import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
+
+// Import your page components
+import Dashboard from "./pages/Dashboard";
+import CustomerClub from "./pages/CustomerClub";
 
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 
@@ -14,68 +30,89 @@ const theme = createTheme({
   },
 });
 
-const CustomContainer = styled(Container)(() => ({
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  alignItems: "center",
-  minHeight: "98vh",
-  flexGrow: "1",
-  paddingTop: "80px",
-  paddingBottom: "80px",
-  animation: "fade-in",
-}));
+function App() {
+  const [isNavbarVisible, setIsNavbarVisible] = useState(true);
+  const [isPinned, setIsPinned] = useState(false); // NEW: State to track if navbar is pinned
 
-const CustomCard = styled(Card)(() => ({
-  // height: "100%",
-  // flexGrow: "1",
-  display: "flex",
-  width: "min(520px, 40vw)",
-  flexDirection: "column",
-  padding: "20px",
-  border: "2px solid #e0e0e2",
-  borderRadius: "12px",
-}));
-export default function App() {
-  const [custData, setCustData] = useState(null);
-  const [isNew, setIsNew] = useState(false);
+  // NEW: Handler for the pin button
+  const handlePinClick = () => {
+    setIsPinned((prevState) => !prevState);
+  };
 
   return (
-    <ThemeProvider theme={theme}>
-      <CustomContainer maxWidth="lg">
-        <CustomCard elevation={0}>
-          <Typography variant="h5" align="center" gutterBottom>
-            🐶 Customer Club 🐶
-          </Typography>
-          <CardContent>
-            {!custData ? (
-              <LookupForm
-                onFound={(data) => {
-                  setCustData(data);
-                  setIsNew(false);
-                }}
-                onNotFound={(phone) => {
-                  setCustData({ phone });
-                  setIsNew(true);
-                }}
-              />
-            ) : (
-              <Box>
-                <PurchaseForm
-                  style={{ animation: "fade-in" }}
-                  customer={custData}
-                  isNew={isNew}
-                  setIsNew={setIsNew}
-                  onDone={() => {
-                    setCustData(null);
-                    setIsNew(false);
-                  }}
-                />
-              </Box>
-            )}
-          </CardContent>
-        </CustomCard>
-      </CustomContainer>
-    </ThemeProvider>
+    <Router>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          position: "relative",
+        }}
+      >
+        <Box
+          onMouseEnter={() => setIsNavbarVisible(true)}
+          // MODIFIED: Navbar only hides if it's not pinned
+          onMouseLeave={() => {
+            if (!isPinned) {
+              setIsNavbarVisible(false);
+            }
+          }}
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            zIndex: 1200,
+          }}
+        >
+          <AppBar
+            position="absolute"
+            elevation={0}
+            sx={{
+              transition: "transform 0.3s ease-in-out",
+              transform: isNavbarVisible
+                ? "translateY(0)"
+                : "translateY(-100%)",
+              backgroundColor: "rgba(255, 255, 255, 0.25)",
+              backdropFilter: "blur(10px)",
+              border: "1px solid rgba(255, 255, 255, 0.18)",
+              boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
+              borderRadius: "8px",
+            }}
+          >
+            <Toolbar>
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                Pet Shop
+              </Typography>
+              <Button color="inherit" component={Link} to="/dashboard">
+                Dashboard
+              </Button>
+              <Button color="inherit" component={Link} to="/customer-club">
+                Customer Club
+              </Button>
+
+              {/* NEW: Pin Button */}
+              <IconButton
+                color="inherit"
+                onClick={handlePinClick}
+                sx={{ ml: 1 }}
+              >
+                {isPinned ? <PushPinIcon /> : <PushPinOutlinedIcon />}
+              </IconButton>
+            </Toolbar>
+          </AppBar>
+        </Box>
+
+        <Box sx={{ flexGrow: 1, overflow: "hidden" }}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/customer-club" element={<CustomerClub />} />
+          </Routes>
+        </Box>
+      </Box>
+    </Router>
   );
 }
+
+export default App;
