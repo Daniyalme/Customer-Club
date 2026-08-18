@@ -9,7 +9,7 @@ import { Responsive, WidthProvider } from "react-grid-layout";
 import { v4 as uuidv4 } from "uuid";
 import styled from "@emotion/styled";
 import { HexColorPicker } from "react-colorful";
-import { FaPlus, FaPalette, FaTimes, FaBackspace } from "react-icons/fa";
+import { FaPlus, FaPalette, FaTimes, FaGripLines } from "react-icons/fa";
 import {
   Dialog,
   DialogTitle,
@@ -214,10 +214,25 @@ const Row = styled.div`
   }
 `;
 
+const DividerRowLine = styled.div`
+  width: 100%;
+  flex: 1;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(60, 60, 62, 0.2) 0%,
+    rgba(60, 60, 62, 0.55) 15%,
+    rgba(60, 60, 62, 0.55) 85%,
+    rgba(60, 60, 62, 0.2) 100%
+  );
+`;
+
 const RowMain = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
 `;
 
 const DragHandle = styled.span`
@@ -496,7 +511,16 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
     updateCard(card.id, { rows: updatedRows });
   };
 
+  const handleAddDividerRow = () => {
+    const dividerRow = {
+      id: uuidv4(),
+      type: "divider",
+    };
+    updateCard(card.id, { rows: [...card.rows, dividerRow] });
+  };
+
   const handleStartRowEdit = (row) => {
+    if (row.type === "divider") return;
     setEditingRowId(row.id);
     setEditingRowItem(row.item || "");
     setEditingRowPrice(row.price || "");
@@ -691,6 +715,13 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
               )}
             </ColorPickerContainer>
           </SubtleButton>
+          <SubtleButton
+            className="no-drag"
+            onClick={handleAddDividerRow}
+            title="Add divider row"
+          >
+            <FaGripLines />
+          </SubtleButton>
           <SubtleButton className="no-drag" onClick={() => removeCard(card.id)}>
             <FaTimes />
           </SubtleButton>
@@ -721,6 +752,7 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
             onDragOver={(e) => handleRowDragOver(e, row.id)}
             onDrop={(e) => handleRowDrop(e, row.id)}
             style={{
+              gridColumn: row.type === "divider" ? "1 / -1" : "auto",
               opacity: draggingRowId === row.id ? 0.3 : 1,
               transform: draggingRowId === row.id ? "scale(0.98)" : "scale(1)",
               boxShadow:
@@ -733,7 +765,32 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
                   : "none",
             }}
           >
-            {editingRowId === row.id ? (
+            {row.type === "divider" ? (
+              <>
+                <RowMain>
+                  <DragHandle
+                    className="no-drag"
+                    draggable={true}
+                    onDragStart={(e) => handleRowDragStart(e, row.id)}
+                    onDragEnd={handleRowDragEnd}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Drag to reorder"
+                  >
+                    ⋮⋮
+                  </DragHandle>
+                  <DividerRowLine />
+                </RowMain>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <RemoveRowButton
+                    className="remove-row-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveRow(row.id);
+                    }}
+                  />
+                </div>
+              </>
+            ) : editingRowId === row.id ? (
               <>
                 <UniversalInput
                   autoFocus
