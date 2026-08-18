@@ -1,9 +1,29 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+} from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import { v4 as uuidv4 } from "uuid";
 import styled from "@emotion/styled";
 import { HexColorPicker } from "react-colorful";
 import { FaPlus, FaPalette, FaTimes, FaBackspace } from "react-icons/fa";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography,
+} from "@mui/material";
+import {
+  getDashboardCards,
+  saveDashboardCards,
+  getDashboardMigrationState,
+  setDashboardMigrationDecision,
+} from "../api";
 
 // Required styles for react-grid-layout
 const RGL_STYLES = `
@@ -65,8 +85,9 @@ const PageContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  font-family: -apple-system, BlinkMacSystemFont, Lexend, Dosis, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, Lexend, Dosis, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
 `;
 
 const GridContainer = styled.div`
@@ -177,8 +198,35 @@ const Row = styled.div`
   height: 26px;
   font-size: 0.9em;
   color: #3c3c3e;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.35);
+  }
   &:hover .remove-row-btn {
     opacity: 1;
+  }
+`;
+
+const RowMain = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const DragHandle = styled.span`
+  font-size: 0.9em;
+  cursor: grab;
+  user-select: none;
+  line-height: 1;
+  &:active {
+    cursor: grabbing;
   }
 `;
 
@@ -190,7 +238,9 @@ const RemoveRowButton = styled(FaTimes)`
   color: #9e9e9e;
   cursor: pointer;
   opacity: 0; /* Hidden by default */
-  transition: opacity 0.2s ease, color 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    color 0.2s ease;
   margin-left: 8px;
   &:hover {
     color: #e53935;
@@ -303,6 +353,34 @@ const SOFT_PALETTE = [
   "#FBE9E7",
   "#E1F5FE",
 ];
+const LEGACY_STORAGE_KEY = "dashboard-cards";
+
+const createDefaultCards = () => [
+  {
+    id: "a",
+    title: "Groceries",
+    color: "#E8EAF6",
+    rows: [
+      { id: uuidv4(), item: "Milk", price: "2" },
+      { id: uuidv4(), item: "Bread", price: "1.50" },
+    ],
+    layout: { i: "a", x: 0, y: 0, w: 1, h: 2 },
+  },
+  {
+    id: "b",
+    title: "Work Tasks",
+    color: "#E0F2F1",
+    rows: [{ id: uuidv4(), item: "Finish report", price: "EOD" }],
+    layout: { i: "b", x: 1, y: 0, w: 1, h: 1 },
+  },
+  {
+    id: "c",
+    title: "Project Ideas",
+    color: "#F3E5F5",
+    rows: [],
+    layout: { i: "c", x: 2, y: 0, w: 2, h: 3 },
+  },
+];
 
 // Card Component
 // =================================================================
@@ -312,10 +390,18 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
   const [isAddingRow, setIsAddingRow] = useState(false);
   const [newRowItem, setNewRowItem] = useState("");
   const [newRowPrice, setNewRowPrice] = useState("");
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [editingRowItem, setEditingRowItem] = useState("");
+  const [editingRowPrice, setEditingRowPrice] = useState("");
+  const [draggingRowId, setDraggingRowId] = useState(null);
+  const [dragOverRowId, setDragOverRowId] = useState(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   const titleInputRef = useRef(null);
   const colorPickerRef = useRef(null);
+  const rowRefs = useRef(new Map());
+  const previousRowPositions = useRef(new Map());
+  const dragPreviewRef = useRef(null);
 
   useOnClickOutside(colorPickerRef, () => setShowColorPicker(false));
 
@@ -325,6 +411,49 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
   useEffect(() => {
     isEditingTitle && titleInputRef.current?.focus();
   }, [isEditingTitle]);
+
+  useLayoutEffect(() => {
+    const nextPositions = new Map();
+
+    card.rows.forEach((row) => {
+      const element = rowRefs.current.get(row.id);
+      if (!element) return;
+      nextPositions.set(row.id, element.getBoundingClientRect());
+    });
+
+    nextPositions.forEach((nextRect, rowId) => {
+      const prevRect = previousRowPositions.current.get(rowId);
+      if (!prevRect) return;
+
+      const deltaX = prevRect.left - nextRect.left;
+      const deltaY = prevRect.top - nextRect.top;
+
+      if (!deltaX && !deltaY) return;
+
+      const element = rowRefs.current.get(rowId);
+      if (!element) return;
+
+      element.style.transition = "none";
+      element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+      requestAnimationFrame(() => {
+        element.style.transition =
+          "transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+        element.style.transform = "translate(0, 0)";
+      });
+    });
+
+    previousRowPositions.current = nextPositions;
+  }, [card.rows]);
+
+  useEffect(() => {
+    return () => {
+      if (dragPreviewRef.current) {
+        dragPreviewRef.current.remove();
+        dragPreviewRef.current = null;
+      }
+    };
+  }, []);
 
   const handleTitleSubmit = () => {
     if (title.trim()) updateCard(card.id, { title: title.trim() });
@@ -365,6 +494,151 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
   const handleRemoveRow = (rowId) => {
     const updatedRows = card.rows.filter((row) => row.id !== rowId);
     updateCard(card.id, { rows: updatedRows });
+  };
+
+  const handleStartRowEdit = (row) => {
+    setEditingRowId(row.id);
+    setEditingRowItem(row.item || "");
+    setEditingRowPrice(row.price || "");
+  };
+
+  const handleCancelRowEdit = () => {
+    setEditingRowId(null);
+    setEditingRowItem("");
+    setEditingRowPrice("");
+  };
+
+  const handleSaveRowEdit = () => {
+    if (!editingRowId) return;
+
+    const updatedRows = card.rows.map((row) =>
+      row.id === editingRowId
+        ? { ...row, item: editingRowItem, price: editingRowPrice }
+        : row,
+    );
+
+    updateCard(card.id, { rows: updatedRows });
+    handleCancelRowEdit();
+  };
+
+  const handleEditingRowKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSaveRowEdit();
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      handleCancelRowEdit();
+    }
+  };
+
+  const handleEditingRowBlur = (e) => {
+    if (e.currentTarget.contains(e.relatedTarget)) {
+      return;
+    }
+    handleSaveRowEdit();
+  };
+
+  const moveRow = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+
+    const rows = [...card.rows];
+    const fromIndex = rows.findIndex((row) => row.id === fromId);
+    const toIndex = rows.findIndex((row) => row.id === toId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const [moved] = rows.splice(fromIndex, 1);
+    rows.splice(toIndex, 0, moved);
+    updateCard(card.id, { rows });
+  };
+
+  const moveRowToEnd = (fromId) => {
+    if (!fromId) return;
+
+    const rows = [...card.rows];
+    const fromIndex = rows.findIndex((row) => row.id === fromId);
+    if (fromIndex === -1 || fromIndex === rows.length - 1) return;
+
+    const [moved] = rows.splice(fromIndex, 1);
+    rows.push(moved);
+    updateCard(card.id, { rows });
+  };
+
+  const cleanupDragPreview = () => {
+    if (dragPreviewRef.current) {
+      dragPreviewRef.current.remove();
+      dragPreviewRef.current = null;
+    }
+  };
+
+  const createDragPreview = (rowElement) => {
+    cleanupDragPreview();
+
+    const preview = rowElement.cloneNode(true);
+    preview.style.position = "fixed";
+    preview.style.top = "-1000px";
+    preview.style.left = "-1000px";
+    preview.style.width = `${rowElement.getBoundingClientRect().width}px`;
+    preview.style.pointerEvents = "none";
+    preview.style.margin = "0";
+    preview.style.opacity = "0.95";
+    preview.style.borderRadius = "6px";
+    preview.style.background = "rgba(255, 255, 255, 0.9)";
+    preview.style.backdropFilter = "blur(2px)";
+    preview.style.boxShadow = "0 10px 24px rgba(0, 0, 0, 0.22)";
+    preview.style.transform = "scale(1.02)";
+    preview.style.zIndex = "9999";
+    document.body.appendChild(preview);
+    dragPreviewRef.current = preview;
+    return preview;
+  };
+
+  const handleRowDragStart = (e, rowId) => {
+    if (editingRowId === rowId) return;
+
+    const rowElement = rowRefs.current.get(rowId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", rowId);
+
+    if (rowElement && e.dataTransfer.setDragImage) {
+      const preview = createDragPreview(rowElement);
+      e.dataTransfer.setDragImage(preview, 18, 12);
+    }
+
+    setDraggingRowId(rowId);
+  };
+
+  const handleRowDragEnd = () => {
+    cleanupDragPreview();
+    setDraggingRowId(null);
+    setDragOverRowId(null);
+  };
+
+  const handleRowDragOver = (e, rowId) => {
+    e.preventDefault();
+    if (rowId !== draggingRowId) {
+      setDragOverRowId(rowId);
+    }
+  };
+
+  const handleRowDrop = (e, rowId) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData("text/plain") || draggingRowId;
+    moveRow(sourceId, rowId);
+    cleanupDragPreview();
+    setDraggingRowId(null);
+    setDragOverRowId(null);
+  };
+
+  const handleCardContentDrop = (e) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData("text/plain") || draggingRowId;
+    moveRowToEnd(sourceId);
+    cleanupDragPreview();
+    setDraggingRowId(null);
+    setDragOverRowId(null);
   };
 
   return (
@@ -423,17 +697,86 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
         </HeaderIcons>
       </CardHeader>
 
-      <CardContent columns={card.layout.w}>
+      <CardContent
+        columns={card.layout.w}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleCardContentDrop}
+      >
         {card.rows.map((row) => (
-          <Row className="no-drag" key={row.id}>
-            <span>{row.item}</span>
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <RowPrice>${row.price}</RowPrice>
-              <RemoveRowButton
-                className="remove-row-btn"
-                onClick={() => handleRemoveRow(row.id)}
-              />
-            </div>
+          <Row
+            className="no-drag"
+            key={row.id}
+            ref={(el) => {
+              if (el) {
+                rowRefs.current.set(row.id, el);
+              } else {
+                rowRefs.current.delete(row.id);
+              }
+            }}
+            onClick={() => handleStartRowEdit(row)}
+            onBlur={editingRowId === row.id ? handleEditingRowBlur : undefined}
+            onKeyDown={
+              editingRowId === row.id ? handleEditingRowKeyDown : undefined
+            }
+            onDragOver={(e) => handleRowDragOver(e, row.id)}
+            onDrop={(e) => handleRowDrop(e, row.id)}
+            style={{
+              opacity: draggingRowId === row.id ? 0.3 : 1,
+              transform: draggingRowId === row.id ? "scale(0.98)" : "scale(1)",
+              boxShadow:
+                draggingRowId === row.id
+                  ? "0 6px 14px rgba(0, 0, 0, 0.16)"
+                  : "none",
+              outline:
+                dragOverRowId === row.id && draggingRowId !== row.id
+                  ? "2px dashed rgba(0, 122, 255, 0.5)"
+                  : "none",
+            }}
+          >
+            {editingRowId === row.id ? (
+              <>
+                <UniversalInput
+                  autoFocus
+                  value={editingRowItem}
+                  onChange={(e) => setEditingRowItem(e.target.value)}
+                  placeholder="Item"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <UniversalInput
+                  value={editingRowPrice}
+                  onChange={(e) => setEditingRowPrice(e.target.value)}
+                  placeholder="Price"
+                  style={{ width: "90px", marginLeft: "8px" }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </>
+            ) : (
+              <>
+                <RowMain>
+                  <DragHandle
+                    className="no-drag"
+                    draggable={editingRowId !== row.id}
+                    onDragStart={(e) => handleRowDragStart(e, row.id)}
+                    onDragEnd={handleRowDragEnd}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Drag to reorder"
+                  >
+                    ⋮⋮
+                  </DragHandle>
+                  <span>{row.item}</span>
+                </RowMain>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <RowPrice>${row.price}</RowPrice>
+                  <RemoveRowButton
+                    className="remove-row-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveRow(row.id);
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </Row>
         ))}
       </CardContent>
@@ -466,53 +809,178 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
 // Main App Component
 // =================================================================
 function Dashboard() {
-  const [cards, setCards] = useState(() => {
-    try {
-      const savedCards = localStorage.getItem("dashboard-cards");
-      return savedCards
-        ? JSON.parse(savedCards)
-        : [
-            {
-              id: "a",
-              title: "Groceries",
-              color: "#E8EAF6",
-              rows: [
-                { id: uuidv4(), item: "Milk", price: "2" },
-                { id: uuidv4(), item: "Bread", price: "1.50" },
-              ],
-              layout: { i: "a", x: 0, y: 0, w: 1, h: 2 },
-            },
-            {
-              id: "b",
-              title: "Work Tasks",
-              color: "#E0F2F1",
-              rows: [{ id: uuidv4(), item: "Finish report", price: "EOD" }],
-              layout: { i: "b", x: 1, y: 0, w: 1, h: 1 },
-            },
-            {
-              id: "c",
-              title: "Project Ideas",
-              color: "#F3E5F5",
-              rows: [],
-              layout: { i: "c", x: 2, y: 0, w: 2, h: 3 },
-            },
-          ];
-    } catch (error) {
-      return [];
-    }
-  });
+  const [cards, setCards] = useState([]);
+  const [storageMode, setStorageMode] = useState("file");
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [migrationModalOpen, setMigrationModalOpen] = useState(false);
+  const [legacyCardsForPrompt, setLegacyCardsForPrompt] = useState([]);
 
   const [newlyAddedCardId, setNewlyAddedCardId] = useState(null);
   const gridRef = useRef(null);
+  const skipInitialFilePersistRef = useRef(false);
 
   useEffect(() => {
-    localStorage.setItem("dashboard-cards", JSON.stringify(cards));
-  }, [cards]);
+    let isActive = true;
+
+    const initializeCards = async () => {
+      try {
+        const rawLegacyCards = localStorage.getItem(LEGACY_STORAGE_KEY);
+        let parsedLegacyCards = [];
+
+        if (rawLegacyCards) {
+          try {
+            const parsed = JSON.parse(rawLegacyCards);
+            if (Array.isArray(parsed)) {
+              parsedLegacyCards = parsed;
+            }
+          } catch (error) {
+            parsedLegacyCards = [];
+          }
+        }
+
+        const hasLegacyCards = parsedLegacyCards.length > 0;
+        const migrationStateResponse = await getDashboardMigrationState();
+        const decisionMade = migrationStateResponse.data?.decisionMade;
+        const accepted = migrationStateResponse.data?.accepted;
+
+        if (!isActive) return;
+
+        // if ((hasLegacyCards || true) && !decisionMade) {
+        if (hasLegacyCards && !decisionMade) {
+          setLegacyCardsForPrompt(parsedLegacyCards);
+          setCards(parsedLegacyCards);
+          setStorageMode("local");
+          setMigrationModalOpen(true);
+          setIsBootstrapping(false);
+          return;
+        }
+
+        // if ((hasLegacyCards || true) && decisionMade && !accepted) {
+        if (hasLegacyCards && decisionMade && !accepted) {
+          setCards(parsedLegacyCards);
+          setStorageMode("local");
+          setIsBootstrapping(false);
+          return;
+        }
+
+        const serverCardsResponse = await getDashboardCards();
+        const serverCards = Array.isArray(serverCardsResponse.data?.cards)
+          ? serverCardsResponse.data.cards
+          : [];
+        const serverTouched = Boolean(serverCardsResponse.data?.touched);
+
+        if (!serverTouched) {
+          skipInitialFilePersistRef.current = true;
+          setCards(createDefaultCards());
+        } else {
+          setCards(serverCards);
+        }
+        setStorageMode("file");
+        setIsBootstrapping(false);
+      } catch (error) {
+        if (!isActive) return;
+        setCards(createDefaultCards());
+        setStorageMode("file");
+        setIsBootstrapping(false);
+      }
+    };
+
+    initializeCards();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isBootstrapping) return;
+
+    const persistCards = async () => {
+      if (storageMode === "local") {
+        localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(cards));
+        return;
+      }
+
+      if (skipInitialFilePersistRef.current) {
+        skipInitialFilePersistRef.current = false;
+        return;
+      }
+
+      try {
+        await saveDashboardCards(cards);
+      } catch (error) {
+        // Keep UI responsive even if save fails temporarily.
+      }
+    };
+
+    persistCards();
+  }, [cards, storageMode, isBootstrapping]);
+
+  const handleAcceptMigration = async () => {
+    try {
+      await setDashboardMigrationDecision(true, legacyCardsForPrompt);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      setCards(
+        legacyCardsForPrompt.length > 0
+          ? legacyCardsForPrompt
+          : createDefaultCards(),
+      );
+      setStorageMode("file");
+    } catch (error) {
+      // If migration request fails, keep local mode for this run.
+      setStorageMode("local");
+    } finally {
+      setMigrationModalOpen(false);
+      setLegacyCardsForPrompt([]);
+    }
+  };
+
+  const handleDenyMigration = async () => {
+    try {
+      await setDashboardMigrationDecision(false);
+    } catch (error) {
+      // Best effort only; local mode still applies for current run.
+    } finally {
+      setCards(
+        legacyCardsForPrompt.length > 0
+          ? legacyCardsForPrompt
+          : createDefaultCards(),
+      );
+      setStorageMode("local");
+      setMigrationModalOpen(false);
+      setLegacyCardsForPrompt([]);
+    }
+  };
+
+  const handleResetLocalAndUseFile = async () => {
+    try {
+      const serverCardsResponse = await getDashboardCards();
+      const serverCards = Array.isArray(serverCardsResponse.data?.cards)
+        ? serverCardsResponse.data.cards
+        : [];
+      const serverTouched = Boolean(serverCardsResponse.data?.touched);
+
+      const cardsToUse = serverTouched ? serverCards : createDefaultCards();
+
+      await setDashboardMigrationDecision(true, cardsToUse);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      setCards(cardsToUse);
+      setStorageMode("file");
+    } catch (error) {
+      // Fall back to file mode with defaults if backend lookup fails.
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      setCards(createDefaultCards());
+      setStorageMode("file");
+    } finally {
+      setMigrationModalOpen(false);
+      setLegacyCardsForPrompt([]);
+    }
+  };
 
   useEffect(() => {
     if (newlyAddedCardId && gridRef.current) {
       const newCardElement = gridRef.current.querySelector(
-        `[data-grid-id="${newlyAddedCardId}"]`
+        `[data-grid-id="${newlyAddedCardId}"]`,
       );
       if (newCardElement) {
         newCardElement.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -524,8 +992,8 @@ function Dashboard() {
   const updateCard = useCallback((cardId, updates) => {
     setCards((prevCards) =>
       prevCards.map((card) =>
-        card.id === cardId ? { ...card, ...updates } : card
-      )
+        card.id === cardId ? { ...card, ...updates } : card,
+      ),
     );
   }, []);
 
@@ -538,7 +1006,7 @@ function Dashboard() {
       prevCards.map((card) => {
         const newLayout = layout.find((l) => l.i === card.id);
         return newLayout ? { ...card, layout: newLayout } : card;
-      })
+      }),
     );
   };
 
@@ -557,6 +1025,38 @@ function Dashboard() {
 
   return (
     <FirstLayerContainer>
+      <Dialog open={migrationModalOpen} disableEscapeKeyDown onClose={() => {}}>
+        <DialogTitle>Move Existing Dashboard Data?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            We found dashboard cards saved in this browser profile.
+          </Typography>
+          <Typography sx={{ marginTop: 1 }}>
+            If you choose Move, your cards and rows will be transferred to the
+            server file so they are shared across browser profiles. The browser
+            copy will be removed.
+          </Typography>
+          <Typography sx={{ marginTop: 1 }}>
+            If you choose Keep Local, this run will continue using browser-only
+            data and no migration will happen until the next server restart.
+          </Typography>
+          <Typography sx={{ marginTop: 1 }}>
+            If you choose Reset Local and Use File, browser-saved dashboard data
+            is deleted and file-based storage is used from now on.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleResetLocalAndUseFile} color="error">
+            Reset Local & Use File
+          </Button>
+          <Button onClick={handleDenyMigration} variant="outlined">
+            Keep Local
+          </Button>
+          <Button onClick={handleAcceptMigration} variant="contained">
+            Move To Shared File
+          </Button>
+        </DialogActions>
+      </Dialog>
       <PageContainer>
         <GlobalStyleInjector />
         <GridContainer ref={gridRef}>

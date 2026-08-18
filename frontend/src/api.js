@@ -21,3 +21,19 @@ export function editPurchase(purchaseId, amount, profit) {
 export function deletePurchase(purchaseId) {
   return api.delete(`/purchases/${purchaseId}`);
 }
+
+export function getDashboardCards() {
+  return api.get("/dashboard/cards");
+}
+
+export function saveDashboardCards(cards) {
+  return api.post("/dashboard/cards", { cards });
+}
+
+export function getDashboardMigrationState() {
+  return api.get("/dashboard/migration-state");
+}
+
+export function setDashboardMigrationDecision(accepted, cards = []) {
+  return api.post("/dashboard/migration-decision", { accepted, cards });
+}
