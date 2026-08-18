@@ -1,3 +1,4 @@
+
 @echo off
 REM ─────────────────────────────────────────────────────────────
 REM run.bat – start both the Python backend and React frontend
@@ -11,7 +12,13 @@ echo Starting Python backend...
 start "Backend Server" cmd /k "cd backend && call python app.py"
 
 echo Starting React frontend...
-start "Frontend Dev" cmd /k "cd frontend && npm start"
+start "Frontend Dev" cmd /k "cd frontend/build && call python -m http.server 3000"
+
+REM Wait a few seconds for the server to start
+timeout /t 2 >nul
+
+REM Open the prowser
+start http://localhost:3000
 
 REM Return to original directory
 popd
