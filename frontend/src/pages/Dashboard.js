@@ -649,6 +649,7 @@ const Card = ({ card, updateCard, removeCard, isNew }) => {
 
   const handleRowDrop = (e, rowId) => {
     e.preventDefault();
+    e.stopPropagation();
     const sourceId = e.dataTransfer.getData("text/plain") || draggingRowId;
     moveRow(sourceId, rowId);
     cleanupDragPreview();
